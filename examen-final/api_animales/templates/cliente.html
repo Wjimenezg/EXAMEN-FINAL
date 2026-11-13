@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<!-- Cliente HTTP local: página que Django sirve en la raíz (/) para probar la API de animales.
+     Envía peticiones GET, POST, PUT y DELETE con fetch() y muestra el código de estado y el JSON. -->
+<html lang="es">
+<head>
+<!-- Codificación UTF-8 para mostrar bien tildes y ñ -->
+<meta charset="utf-8">
+<!-- Ajusta el ancho de la página al de la pantalla (útil en celulares) -->
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- Texto que aparece en la pestaña del navegador -->
+<title>Cliente HTTP local - Pruebas de API</title>
+<!-- Estilos de la página (solo apariencia, no afectan la lógica) -->
+<style>
+  /* Variables de color reutilizadas en todo el CSS */
+  :root {
+    --bg: #eef0f2;
+    --panel: #ffffff;
+    --text: #1d2228;
+    --muted: #5b6570;
+    --line: #b9c0c7;
+    --btn: #d6dadf;
+    --btn-active: #2f5d8a;
+    --ok: #1f7a35;
+    --err: #b3261e;
+    --code-bg: #f6f7f8;
+  }
+  /* El ancho de los elementos incluye borde y relleno */
+  * { box-sizing: border-box; }
+  /* Fondo, márgenes y tipografía general */
+  body {
+    margin: 0;
+    padding: 24px;
+    background: var(--bg);
+    color: var(--text);
+    font: 15px/1.45 Arial, Helvetica, sans-serif;
+  }
+  /* Panel blanco central */
+  main {
+    max-width: 960px;
+    margin: 0 auto;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    padding: 22px 24px 28px;
+  }
+  h1 { font-size: 21px; margin: 0 0 6px; }
+  .sub { color: var(--muted); margin: 0 0 18px; }
+  /* Fila de botones de las seis pruebas */
+  .pruebas { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 16px; }
+  .pruebas button {
+    font: 14px "Courier New", monospace;
+    padding: 9px 11px;
+    background: var(--btn);
+    border: 1px solid var(--line);
+    cursor: pointer;
+  }
+  /* Botón de la prueba seleccionada */
+  .pruebas button.activo { background: var(--btn-active); color: #fff; border-color: var(--btn-active); }
+  /* Fila con método, URL y botón Enviar */
+  .fila { display: flex; gap: 6px; margin-bottom: 14px; }
+  select, input, textarea {
+    font: 14px "Courier New", monospace;
+    border: 1px solid var(--line);
+    padding: 7px 8px;
+    color: var(--text);
+    background: #fff;
+  }
+  #url { flex: 1; min-width: 0; }
+  #enviar { font: 14px "Courier New", monospace; padding: 7px 14px; background: var(--btn); border: 1px solid var(--line); cursor: pointer; }
+  label { display: block; font-weight: bold; font-size: 14px; margin-bottom: 6px; }
+  textarea { width: 100%; height: 130px; resize: vertical; }
+  .nota { color: var(--muted); font-size: 13px; margin: 6px 0 16px; }
+  /* Línea del código de estado: verde si es 2xx, rojo si es error */
+  #estado { font-weight: bold; margin: 0 0 8px; min-height: 1.4em; }
+  #estado.ok { color: var(--ok); }
+  #estado.err { color: var(--err); }
+  #peticion { font: 13px "Courier New", monospace; color: var(--muted); margin: 0 0 8px; word-break: break-all; }
+  /* Caja donde se muestra el JSON de respuesta */
+  pre {
+    margin: 0;
+    background: var(--code-bg);
+    border: 1px solid var(--line);
+    padding: 14px 16px;
+    font: 14px/1.4 "Courier New", monospace;
+    max-height: 340px;
+    overflow: auto;
+    white-space: pre-wrap;
+  }
+  /* Contorno visible al navegar con teclado */
+  button:focus-visible, select:focus-visible, input:focus-visible, textarea:focus-visible {
+    outline: 2px solid var(--btn-active);
+    outline-offset: 1px;
+  }
+</style>
+</head>
+<body>
+<main>
+  <!-- Encabezado de la página -->
+  <h1>Cliente HTTP local - Pruebas de API</h1>
+  <p class="sub">Django REST Framework / MySQL · Recurso: animales</p>
+
+  <!-- Botones de las seis pruebas. El atributo data-prueba indica qué
+       función del objeto "pruebas" (en el JavaScript) se ejecuta al hacer clic -->
+  <div class="pruebas">
+    <button data-prueba="crear">1. Crear</button>               <!-- POST   -> 201 -->
+    <button data-prueba="listar">2. Listar</button>             <!-- GET    -> 200 -->
+    <button data-prueba="consultar">3. Consultar ID</button>    <!-- GET id -> 200 -->
+    <button data-prueba="actualizar">4. Actualizar</button>     <!-- PUT id -> 200 -->
+    <button data-prueba="invalidos">5. Datos inválidos</button> <!-- POST   -> 400 -->
+    <button data-prueba="eliminar">6. Eliminar</button>         <!-- DELETE -> 204 -->
+  </div>
+
+  <!-- Petición editable a mano: método HTTP, URL y botón para enviarla -->
+  <div class="fila">
+    <select id="metodo" aria-label="Método HTTP">
+      <option>GET</option><option>POST</option><option>PUT</option><option>DELETE</option>
+    </select>
+    <input id="url" aria-label="URL">
+    <button id="enviar">Enviar</button>
+  </div>
+
+  <!-- Cuerpo JSON que se envía en POST y PUT -->
+  <label for="cuerpo">Cuerpo enviado (JSON)</label>
+  <textarea id="cuerpo" spellcheck="false"></textarea>
+  <p class="nota">Content-Type: application/json</p>
+
+  <!-- Zona de resultados: código de estado, petición realizada y JSON recibido -->
+  <label>Respuesta</label>
+  <p id="estado"></p>
+  <p id="peticion"></p>
+  <pre id="respuesta">Elige una prueba y presiona Enviar.</pre>
+</main>
+
+<!-- Lógica del cliente: arma la petición, la envía con fetch y muestra la respuesta -->
+<script>
+  // Si la página la sirve Django usa su mismo origen; si se abre como archivo, usa el puerto 8001
+  const BASE = location.protocol.startsWith("http") ? location.origin : "http://127.0.0.1:8001";
+  // URL de la colección de animales (la barra final es necesaria para el router de DRF)
+  const API = BASE + "/api/animales/";
+
+  // id del último registro creado, para usarlo en consultar, actualizar y eliminar
+  let ultimoId = null;
+
+  // Atajo para obtener un elemento por su id
+  const $ = (id) => document.getElementById(id);
+  // Convierte un objeto a texto JSON con sangría de 2 espacios (más legible)
+  const json = (obj) => JSON.stringify(obj, null, 2);
+
+  // Devuelve el id a usar en las pruebas 3, 4 y 6
+  function idActual() {
+    // Si ya se creó un registro, se usa su id
+    if (ultimoId) return ultimoId;
+    // Si no, se le pide al usuario; si cancela, se usa "1"
+    const escrito = prompt("¿Qué id quieres usar? (primero crea un registro con la prueba 1)");
+    return escrito ? escrito.trim() : "1";
+  }
+
+  // Cada prueba es una función que devuelve método, URL y cuerpo de la petición
+  const pruebas = {
+    // Prueba 1: crear un animal con datos válidos -> 201 Created
+    crear: () => ({
+      metodo: "POST",
+      url: API,
+      cuerpo: { nombre: "Luna", especie: "Gato", edad: 3 },
+    }),
+    // Prueba 2: listar todos los animales -> 200 OK
+    listar: () => ({ metodo: "GET", url: API, cuerpo: null }),
+    // Prueba 3: consultar un animal por id -> 200 OK (o 404 si no existe)
+    consultar: () => ({ metodo: "GET", url: `${API}${idActual()}/`, cuerpo: null }),
+    // Prueba 4: actualizar todos los campos del animal (PUT) -> 200 OK
+    actualizar: () => ({
+      metodo: "PUT",
+      url: `${API}${idActual()}/`,
+      cuerpo: { nombre: "Luna", especie: "Gato", edad: 4 },
+    }),
+    // Prueba 5:
+    // nombre vacío y sin edad: el serializer devuelve 400 con los errores
+    invalidos: () => ({ metodo: "POST", url: API, cuerpo: { nombre: "", especie: "Gato" } }),
+    // Prueba 6: eliminar el animal -> 204 No Content
+    eliminar: () => ({ metodo: "DELETE", url: `${API}${idActual()}/`, cuerpo: null }),
+  };
+
+  // A cada botón de prueba se le asigna su acción al hacer clic
+  document.querySelectorAll("[data-prueba]").forEach((boton) => {
+    boton.addEventListener("click", () => {
+      // Quita el resaltado de todos los botones y resalta el pulsado
+      document.querySelectorAll("[data-prueba]").forEach((b) => b.classList.remove("activo"));
+      boton.classList.add("activo");
+      // Obtiene la configuración de la prueba según el atributo data-prueba
+      const p = pruebas[boton.dataset.prueba]();
+      // Llena el formulario con el método, la URL y el cuerpo
+      $("metodo").value = p.metodo;
+      $("url").value = p.url;
+      $("cuerpo").value = p.cuerpo ? json(p.cuerpo) : "";
+      // Envía la petición de inmediato
+      enviar();
+    });
+  });
+
+  // El botón Enviar manda lo que haya en el formulario (permite editarlo a mano)
+  $("enviar").addEventListener("click", enviar);
+
+  // Envía la petición HTTP y muestra el resultado
+  async function enviar() {
+    // Lee los valores actuales del formulario
+    const metodo = $("metodo").value;
+    const url = $("url").value.trim();
+    const texto = $("cuerpo").value.trim();
+    // Opciones de fetch: método y cabecera para pedir JSON
+    const opciones = { method: metodo, headers: { Accept: "application/json" } };
+
+    // GET y DELETE no llevan cuerpo; POST y PUT sí, si hay texto
+    if (texto && metodo !== "GET" && metodo !== "DELETE") {
+      // Comprueba en el navegador que el texto sea JSON válido antes de enviarlo
+      try {
+        JSON.parse(texto);
+      } catch {
+        mostrarEstado("El cuerpo no es JSON válido. Revísalo antes de enviar.", false);
+        return;
+      }
+      // Indica al servidor que el cuerpo es JSON (DRF solo acepta JSONParser)
+      opciones.headers["Content-Type"] = "application/json";
+      opciones.body = texto;
+    }
+
+    // Muestra qué petición se está haciendo
+    $("peticion").textContent = `${metodo} ${url}`;
+    $("respuesta").textContent = "Enviando…";
+
+    try {
+      // Hace la petición y espera la respuesta del servidor
+      const res = await fetch(url, opciones);
+      // Tipo de contenido de la respuesta (un 204 no trae cuerpo ni tipo)
+      const tipo = res.headers.get("Content-Type") || "sin contenido";
+      // Lee el cuerpo como texto plano
+      const crudo = await res.text();
+      // Intenta convertir el texto a objeto JSON; si falla, se queda como texto
+      let datos = null;
+      try { datos = crudo ? JSON.parse(crudo) : null; } catch { datos = crudo; }
+
+      // Si se creó un registro (201), guarda su id para las siguientes pruebas
+      if (metodo === "POST" && res.status === 201 && datos && datos.id) ultimoId = datos.id;
+      // Si se eliminó correctamente, olvida el id
+      if (metodo === "DELETE" && res.ok) ultimoId = null;
+
+      // Muestra "código texto | tipo"; res.ok es true para códigos 200-299
+      mostrarEstado(`${res.status} ${res.statusText || textoEstado(res.status)} | ${tipo.split(";")[0]}`, res.ok);
+      // Muestra el cuerpo de la respuesta (o un aviso si vino vacío, como en el 204)
+      $("respuesta").textContent = datos === null
+        ? "(Sin cuerpo: el registro se eliminó correctamente)"
+        : typeof datos === "string" ? datos : json(datos);
+    } catch (e) {
+      // fetch solo falla aquí si no hubo conexión (por ejemplo, servidor apagado)
+      mostrarEstado("No hubo respuesta del servidor", false);
+      $("respuesta").textContent = "¿Está corriendo Django en " + BASE + "?\n\n" + e;
+    }
+  }
+
+  // Texto del código de estado, por si el navegador no lo da (pasa con HTTP/2)
+  function textoEstado(codigo) {
+    return { 200: "OK", 201: "Created", 204: "No Content", 400: "Bad Request", 404: "Not Found" }[codigo] || "";
+  }
+
+  // Escribe el estado y lo pinta de verde (ok) o rojo (error)
+  function mostrarEstado(texto, ok) {
+    $("estado").textContent = texto;
+    $("estado").className = ok ? "ok" : "err";
+  }
+</script>
+</body>
+</html>
