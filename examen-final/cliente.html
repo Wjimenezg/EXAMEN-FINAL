@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cliente HTTP local - Pruebas de API</title>
+<style>
+  :root {
+    --bg: #eef0f2;
+    --panel: #ffffff;
+    --text: #1d2228;
+    --muted: #5b6570;
+    --line: #b9c0c7;
+    --btn: #d6dadf;
+    --btn-active: #2f5d8a;
+    --ok: #1f7a35;
+    --err: #b3261e;
+    --code-bg: #f6f7f8;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 24px;
+    background: var(--bg);
+    color: var(--text);
+    font: 15px/1.45 Arial, Helvetica, sans-serif;
+  }
+  main {
+    max-width: 960px;
+    margin: 0 auto;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    padding: 22px 24px 28px;
+  }
+  h1 { font-size: 21px; margin: 0 0 6px; }
+  .sub { color: var(--muted); margin: 0 0 18px; }
+  .pruebas { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 16px; }
+  .pruebas button {
+    font: 14px "Courier New", monospace;
+    padding: 9px 11px;
+    background: var(--btn);
+    border: 1px solid var(--line);
+    cursor: pointer;
+  }
+  .pruebas button.activo { background: var(--btn-active); color: #fff; border-color: var(--btn-active); }
+  .fila { display: flex; gap: 6px; margin-bottom: 14px; }
+  select, input, textarea {
+    font: 14px "Courier New", monospace;
+    border: 1px solid var(--line);
+    padding: 7px 8px;
+    color: var(--text);
+    background: #fff;
+  }
+  #url { flex: 1; min-width: 0; }
+  #enviar { font: 14px "Courier New", monospace; padding: 7px 14px; background: var(--btn); border: 1px solid var(--line); cursor: pointer; }
+  label { display: block; font-weight: bold; font-size: 14px; margin-bottom: 6px; }
+  textarea { width: 100%; height: 130px; resize: vertical; }
+  .nota { color: var(--muted); font-size: 13px; margin: 6px 0 16px; }
+  #estado { font-weight: bold; margin: 0 0 8px; min-height: 1.4em; }
+  #estado.ok { color: var(--ok); }
+  #estado.err { color: var(--err); }
+  #peticion { font: 13px "Courier New", monospace; color: var(--muted); margin: 0 0 8px; word-break: break-all; }
+  pre {
+    margin: 0;
+    background: var(--code-bg);
+    border: 1px solid var(--line);
+    padding: 14px 16px;
+    font: 14px/1.4 "Courier New", monospace;
+    max-height: 340px;
+    overflow: auto;
+    white-space: pre-wrap;
+  }
+  button:focus-visible, select:focus-visible, input:focus-visible, textarea:focus-visible {
+    outline: 2px solid var(--btn-active);
+    outline-offset: 1px;
+  }
+</style>
+</head>
+<body>
+<main>
+  <h1>Cliente HTTP local - Pruebas de API</h1>
+  <p class="sub">Django REST Framework / MySQL · Recurso: animales</p>
+
+  <div class="pruebas">
+    <button data-prueba="crear">1. Crear</button>
+    <button data-prueba="listar">2. Listar</button>
+    <button data-prueba="consultar">3. Consultar ID</button>
+    <button data-prueba="actualizar">4. Actualizar</button>
+    <button data-prueba="invalidos">5. Datos inválidos</button>
+    <button data-prueba="eliminar">6. Eliminar</button>
+  </div>
+
+  <div class="fila">
+    <select id="metodo" aria-label="Método HTTP">
+      <option>GET</option><option>POST</option><option>PUT</option><option>DELETE</option>
+    </select>
+    <input id="url" aria-label="URL">
+    <button id="enviar">Enviar</button>
+  </div>
+
+  <label for="cuerpo">Cuerpo enviado (JSON)</label>
+  <textarea id="cuerpo" spellcheck="false"></textarea>
+  <p class="nota">Content-Type: application/json</p>
+
+  <label>Respuesta</label>
+  <p id="estado"></p>
+  <p id="peticion"></p>
+  <pre id="respuesta">Elige una prueba y presiona Enviar.</pre>
+</main>
+
+<script>
+  // Si la página la sirve Django usa su mismo origen; si se abre como archivo, usa el puerto 8001
+  const BASE = location.protocol.startsWith("http") ? location.origin : "http://127.0.0.1:8001";
+  const API = BASE + "/api/animales/";
+
+  // id del último registro creado, para usarlo en consultar, actualizar y eliminar
+  let ultimoId = null;
+
+  const $ = (id) => document.getElementById(id);
+  const json = (obj) => JSON.stringify(obj, null, 2);
+
+  function idActual() {
+    if (ultimoId) return ultimoId;
+    const escrito = prompt("¿Qué id quieres usar? (primero crea un registro con la prueba 1)");
+    return escrito ? escrito.trim() : "1";
+  }
+
+  const pruebas = {
+    crear: () => ({
+      metodo: "POST",
+      url: API,
+      cuerpo: { nombre: "Luna", especie: "Gato", edad: 3 },
+    }),
+    listar: () => ({ metodo: "GET", url: API, cuerpo: null }),
+    consultar: () => ({ metodo: "GET", url: `${API}${idActual()}/`, cuerpo: null }),
+    actualizar: () => ({
+      metodo: "PUT",
+      url: `${API}${idActual()}/`,
+      cuerpo: { nombre: "Luna", especie: "Gato", edad: 4 },
+    }),
+    // nombre vacío y sin edad: el serializer devuelve 400 con los errores
+    invalidos: () => ({ metodo: "POST", url: API, cuerpo: { nombre: "", especie: "Gato" } }),
+    eliminar: () => ({ metodo: "DELETE", url: `${API}${idActual()}/`, cuerpo: null }),
+  };
+
+  document.querySelectorAll("[data-prueba]").forEach((boton) => {
+    boton.addEventListener("click", () => {
+      document.querySelectorAll("[data-prueba]").forEach((b) => b.classList.remove("activo"));
+      boton.classList.add("activo");
+      const p = pruebas[boton.dataset.prueba]();
+      $("metodo").value = p.metodo;
+      $("url").value = p.url;
+      $("cuerpo").value = p.cuerpo ? json(p.cuerpo) : "";
+      enviar();
+    });
+  });
+
+  $("enviar").addEventListener("click", enviar);
+
+  async function enviar() {
+    const metodo = $("metodo").value;
+    const url = $("url").value.trim();
+    const texto = $("cuerpo").value.trim();
+    const opciones = { method: metodo, headers: { Accept: "application/json" } };
+
+    if (texto && metodo !== "GET" && metodo !== "DELETE") {
+      try {
+        JSON.parse(texto);
+      } catch {
+        mostrarEstado("El cuerpo no es JSON válido. Revísalo antes de enviar.", false);
+        return;
+      }
+      opciones.headers["Content-Type"] = "application/json";
+      opciones.body = texto;
+    }
+
+    $("peticion").textContent = `${metodo} ${url}`;
+    $("respuesta").textContent = "Enviando…";
+
+    try {
+      const res = await fetch(url, opciones);
+      const tipo = res.headers.get("Content-Type") || "sin contenido";
+      const crudo = await res.text();
+      let datos = null;
+      try { datos = crudo ? JSON.parse(crudo) : null; } catch { datos = crudo; }
+
+      if (metodo === "POST" && res.status === 201 && datos && datos.id) ultimoId = datos.id;
+      if (metodo === "DELETE" && res.ok) ultimoId = null;
+
+      mostrarEstado(`${res.status} ${res.statusText || textoEstado(res.status)} | ${tipo.split(";")[0]}`, res.ok);
+      $("respuesta").textContent = datos === null
+        ? "(Sin cuerpo: el registro se eliminó correctamente)"
+        : typeof datos === "string" ? datos : json(datos);
+    } catch (e) {
+      mostrarEstado("No hubo respuesta del servidor", false);
+      $("respuesta").textContent = "¿Está corriendo Django en " + BASE + "?\n\n" + e;
+    }
+  }
+
+  function textoEstado(codigo) {
+    return { 200: "OK", 201: "Created", 204: "No Content", 400: "Bad Request", 404: "Not Found" }[codigo] || "";
+  }
+
+  function mostrarEstado(texto, ok) {
+    $("estado").textContent = texto;
+    $("estado").className = ok ? "ok" : "err";
+  }
+</script>
+</body>
+</html>
